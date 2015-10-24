@@ -1,0 +1,121 @@
+---
+title: Machine Learning Week 3 Assignment
+        Exercise Prediction
+author: Richard Ellison
+date: October 22, 2015
+output: html_document
+---
+
+### Background and Summary ###
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise, using the classe variable in the training set.  They you will use the prediction model built to predict 20 different test cases in different files for submission.
+
+### Data Processing ###
+
+```{r setup, cache=FALSE, include=FALSE}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(rattle)
+library(ggplot2)
+
+opts_chunk$set(fig.path='figure/')
+```
+
+**Read the Groupware@LES data, Human Activity Recognition**
+```{r,echo=TRUE}
+
+trainData <- read.csv("C:/Users/rellison/Documents/Coursera/MachineLearning/pml-training.csv")
+
+testData <- read.csv("C:/Users/rellison/Documents/Coursera/MachineLearning/pml-testing.csv")
+
+```
+
+#investigate the data
+
+```{r,echo=TRUE}
+dim(trainData)
+```
+#Classe variable is the outcome for prediction. Training data contains 19,622 observations and 160 variables.
+
+```{r,echo=TRUE}
+dim(testData)
+```
+#Testing records contain 20 observations and 160 variables.
+
+
+**Subset the data to retain only the fields needed for the analysis**
+# Since we only care about readings for belt, forearm, arm and dumbell,
+# remove missing values and fields with timestamp or window in the names
+```{r,echo=TRUE}
+trainData <- trainData[, colSums(is.na(trainData))==0]
+testData <- testData[, colSums(is.na(testData))==0]
+
+classe<-trainData$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainData))
+trainData <- trainData[, !trainRemove]
+trainClean <- trainData[, sapply(trainData, is.numeric)]
+trainClean$classe <- classe
+head(trainClean)
+
+testRemove <- grepl("^X|timestamp|window", names(testData))
+testData <- testData[, !testRemove]
+testClean <- testData[, sapply(testData, is.numeric)]
+dim(testClean)
+
+```
+
+**Build 70/30 training/validation data sets from the clean training dataset**
+```{r, echo=TRUE}
+set.seed(23456)
+inTrain <- createDataPartition(trainClean$classe, p=0.70, list=F)
+trainData2 <- trainClean[inTrain, ]
+testData2 <- trainClean[-inTrain, ]
+dim(trainData2)
+dim(testData2)
+
+```
+
+**Fit a Random Forest predictive model with 5-fold cross validation**
+```{r, echo=TRUE}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData2,method="rf",trControl=controlRf, ntree=250)
+modelRf
+
+```
+
+** Estimate the performance of the model on the validation data **
+```{r, echo=TRUE}
+predictRf <- predict(modelRf, testData2)
+confusionMatrix(testData2$classe, predictRf)
+
+accuracy <- postResample(predictRf, testData2$classe)
+accuracy
+
+ooserror <- 1 - as.numeric(confusionMatrix(testData2$classe,predictRf)$overall[1])
+ooserror
+
+```
+
+#The estimated accuracy of the model is 99% and the estimated out-of-sample error is .6%
+
+** Apply the model to the original test dataset **
+```{r, echo=TRUE}
+appliedModel <- predict(modelRf, testClean[, -length(names(testClean))])
+appliedModel
+
+```
+
+### Appendix ###
+
+** Show the fancy tree model for the original training classe variable**
+```{r, echo=TRUE}
+FRPmodel <- train(classe ~ ., data=trainClean, method="rpart")
+fancyRpartPlot(FRPmodel$finalModel)
+```
+
